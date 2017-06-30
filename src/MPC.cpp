@@ -18,7 +18,7 @@ size_t delta_start = epsi_start + N;
 size_t a_start = delta_start + N - 1;
 
 // The reference velocity
-double ref_v = 60;
+double ref_v = 80;
 
 class FG_eval {
  public:
@@ -28,10 +28,10 @@ class FG_eval {
 
   typedef CPPAD_TESTVECTOR(AD<double>) ADvector;
   void operator()(ADvector& fg, const ADvector& vars) {
-    for (int t = 0; t < N; t++) {
-        fg[0] += CppAD::pow(vars[cte_start + t], 2);
-        fg[0] += CppAD::pow(vars[epsi_start + t], 2);
-        fg[0] += CppAD::pow(vars[v_start + t] - ref_v, 2);
+    for (int i = 0; i < N; i++) {
+        fg[0] += 2000 * CppAD::pow(vars[cte_start + i], 2);
+        fg[0] += 2000 * CppAD::pow(vars[epsi_start + i], 2);
+        fg[0] += CppAD::pow(vars[v_start + i] - ref_v, 2);
     }
       
     // Minimize the use of actuators.
@@ -56,26 +56,26 @@ class FG_eval {
     fg[1 + epsi_start] = vars[epsi_start];
       
     // Other constraints
-    for (int t = 1; t < N; t++) {
+    for (int i = 1; i < N; i++) {
         // The state at time t+1 .
-        AD<double> x1 = vars[x_start + t];
-        AD<double> y1 = vars[y_start + t];
-        AD<double> psi1 = vars[psi_start + t];
-        AD<double> v1 = vars[v_start + t];
-        AD<double> cte1 = vars[cte_start + t];
-        AD<double> epsi1 = vars[epsi_start + t];
+        AD<double> x1 = vars[x_start + i];
+        AD<double> y1 = vars[y_start + i];
+        AD<double> psi1 = vars[psi_start + i];
+        AD<double> v1 = vars[v_start + i];
+        AD<double> cte1 = vars[cte_start + i];
+        AD<double> epsi1 = vars[epsi_start + i];
           
         // The state at time t.
-        AD<double> x0 = vars[x_start + t - 1];
-        AD<double> y0 = vars[y_start + t - 1];
-        AD<double> psi0 = vars[psi_start + t - 1];
-        AD<double> v0 = vars[v_start + t - 1];
-        AD<double> cte0 = vars[cte_start + t - 1];
-        AD<double> epsi0 = vars[epsi_start + t - 1];
+        AD<double> x0 = vars[x_start + i - 1];
+        AD<double> y0 = vars[y_start + i - 1];
+        AD<double> psi0 = vars[psi_start + i - 1];
+        AD<double> v0 = vars[v_start + i - 1];
+        AD<double> cte0 = vars[cte_start + i - 1];
+        AD<double> epsi0 = vars[epsi_start + i - 1];
           
         // Only consider the actuation at time t.
-        AD<double> delta0 = vars[delta_start + t - 1];
-        AD<double> a0 = vars[a_start + t - 1];
+        AD<double> delta0 = vars[delta_start + i - 1];
+        AD<double> a0 = vars[a_start + i - 1];
           
         AD<double> f0 = coeffs[0] + coeffs[1] * x0 + coeffs[2] *CppAD::pow(x0,2) + coeffs[3] *CppAD::pow(x0,3);
         AD<double> psides0 = CppAD::atan(coeffs[1] + 2 * coeffs[2] * x0 + 3 * coeffs[3]*CppAD::pow(x0,2));
@@ -87,12 +87,12 @@ class FG_eval {
         // v_[t] = v[t-1] + a[t-1] * dt
         // cte[t] = f(x[t-1]) - y[t-1] + v[t-1] * sin(epsi[t-1]) * dt
         // epsi[t] = psi[t] - psides[t-1] + v[t-1] * delta[t-1] / Lf * dt
-        fg[1 + x_start + t] = x1 - (x0 + v0 * CppAD::cos(psi0) * dt);
-        fg[1 + y_start + t] = y1 - (y0 + v0 * CppAD::sin(psi0) * dt);
-        fg[1 + psi_start + t] = psi1 - (psi0 + v0 * delta0 / Lf * dt);
-        fg[1 + v_start + t] = v1 - (v0 + a0 * dt);
-        fg[1 + cte_start + t] = cte1 - ((f0 - y0) + (v0 * CppAD::sin(epsi0) * dt));
-        fg[1 + epsi_start + t] = epsi1 - ((psi0 - psides0) + v0 * delta0 / Lf * dt);
+        fg[1 + x_start + i] = x1 - (x0 + v0 * CppAD::cos(psi0) * dt);
+        fg[1 + y_start + i] = y1 - (y0 + v0 * CppAD::sin(psi0) * dt);
+        fg[1 + psi_start + i] = psi1 - (psi0 + v0 * delta0 / Lf * dt);
+        fg[1 + v_start + i] = v1 - (v0 + a0 * dt);
+        fg[1 + cte_start + i] = cte1 - ((f0 - y0) + (v0 * CppAD::sin(epsi0) * dt));
+        fg[1 + epsi_start + i] = epsi1 - ((psi0 - psides0) + v0 * delta0 / Lf * dt);
       }
   }
 };
@@ -105,7 +105,6 @@ MPC::~MPC() {}
 
 vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   bool ok = true;
-  size_t i;
   typedef CPPAD_TESTVECTOR(double) Dvector;
 
   // TODO: Set the number of model variables (includes both states and inputs).
@@ -144,18 +143,18 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   Dvector vars_upperbound(n_vars);
     
   for (int i = 0; i < delta_start; i++) {
-    vars_lowerbound[i] = std::numeric_limits<double>::min();
-    vars_upperbound[i] = std::numeric_limits<double>::max();
+    vars_lowerbound[i] = -1.0e19;
+    vars_upperbound[i] = 1.0e19;
   }
   
   // set the range of values δ to [-25, 25]
-  for (i = delta_start; i < a_start; i++) {
+  for (int i = delta_start; i < a_start; i++) {
     vars_lowerbound[i] = -0.436332 * Lf;
     vars_upperbound[i] = 0.436332 * Lf;
   }
   
   //  lower and upper bounds on the constraints must be 0
-  for (i = a_start; i < n_vars; i++) {
+  for (int i = a_start; i < n_vars; i++) {
     vars_lowerbound[i] = -1.0;
     vars_upperbound[i] = 1.0;
   }
